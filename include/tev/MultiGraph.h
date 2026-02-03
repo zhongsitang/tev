@@ -26,6 +26,7 @@
 
 #include <nanogui/widget.h>
 
+#include <functional>
 #include <span>
 
 namespace tev {
@@ -71,6 +72,36 @@ public:
 
     void setZero(int zeroBin) { mZeroBin = zeroBin; }
 
+    // Range selector for histogram
+    void setRangeSelectionEnabled(bool enabled) { mRangeSelectionEnabled = enabled; }
+    bool rangeSelectionEnabled() const { return mRangeSelectionEnabled; }
+
+    // Set the range in normalized coordinates [0, 1] relative to histogram bins
+    void setRangeNormalized(float rangeMin, float rangeMax) {
+        mRangeMin = rangeMin;
+        mRangeMax = rangeMax;
+    }
+
+    float rangeMinNormalized() const { return mRangeMin; }
+    float rangeMaxNormalized() const { return mRangeMax; }
+
+    // Callback when range changes. Parameters are (rangeMin, rangeMax) in normalized coords.
+    void setRangeCallback(const std::function<void(float, float)>& callback) { mRangeCallback = callback; }
+
+    // Set min/max values for converting normalized range to actual values
+    void setValueRange(float minValue, float maxValue) {
+        mMinValue = minValue;
+        mMaxValue = maxValue;
+    }
+
+    float minValue() const { return mMinValue; }
+    float maxValue() const { return mMaxValue; }
+
+    // Mouse event handlers
+    bool mouse_button_event(const nanogui::Vector2i& p, int button, bool down, int modifiers) override;
+    bool mouse_drag_event(const nanogui::Vector2i& p, const nanogui::Vector2i& rel, int button, int modifiers) override;
+    bool mouse_motion_event(const nanogui::Vector2i& p, const nanogui::Vector2i& rel, int button, int modifiers) override;
+
 protected:
     std::string mCaption, mHeader, mFooter;
     nanogui::Color mBackgroundColor, mForegroundColor, mTextColor;
@@ -79,6 +110,21 @@ protected:
     int mNChannels = 1;
     float mMinimum = 0, mMean = 0, mMaximum = 0;
     int mZeroBin = 0;
+
+    // Range selector state
+    bool mRangeSelectionEnabled = false;
+    float mRangeMin = 0.0f;  // Normalized position [0, 1]
+    float mRangeMax = 1.0f;  // Normalized position [0, 1]
+    float mMinValue = 0.0f;  // Actual value at histogram min
+    float mMaxValue = 1.0f;  // Actual value at histogram max
+
+    std::function<void(float, float)> mRangeCallback;
+
+    enum class DragMode { None, Left, Right, Middle };
+    DragMode mDragMode = DragMode::None;
+    float mDragStartRangeMin = 0.0f;
+    float mDragStartRangeMax = 1.0f;
+    int mDragStartX = 0;
 };
 
 } // namespace tev

@@ -545,6 +545,52 @@ ImageViewer::ImageViewer(
             panel->set_layout(new BoxLayout{Orientation::Vertical, Alignment::Fill, 5});
 
             mHistogram = new MultiGraph{panel, ""};
+            mHistogram->setRangeSelectionEnabled(true);
+            mHistogram->setRangeCallback([this](float rangeMin, float rangeMax) {
+                // Convert normalized range [0, 1] to actual value range using the histogram's value range
+                float minVal = mHistogram->minValue();
+                float maxVal = mHistogram->maxValue();
+
+                // Use symmetric log for the conversion (same as histogram binning)
+                static const float addition = 0.001f;
+                static const float smallest = std::log(addition);
+                const auto symmetricLog = [](float val) {
+                    return val > 0 ? (std::log(val + addition) - smallest) : -(std::log(-val + addition) - smallest);
+                };
+                const auto symmetricLogInverse = [](float val) {
+                    return val > 0 ? (std::exp(val + smallest) - addition) : -(std::exp(-val + smallest) - addition);
+                };
+
+                float minLog = symmetricLog(minVal);
+                float maxLog = symmetricLog(maxVal);
+                float diffLog = maxLog - minLog;
+
+                // Convert normalized positions to actual values
+                float actualMin = symmetricLogInverse(minLog + rangeMin * diffLog);
+                float actualMax = symmetricLogInverse(minLog + rangeMax * diffLog);
+
+                // Avoid division by zero
+                if (std::abs(actualMax - actualMin) < 1e-8f) {
+                    return;
+                }
+
+                // Calculate exposure and offset to map [actualMin, actualMax] -> [0, 1]
+                // displayValue = 2^exposure * value + offset
+                // 0 = 2^exposure * actualMin + offset
+                // 1 = 2^exposure * actualMax + offset
+                // Solving: 2^exposure = 1 / (actualMax - actualMin)
+                //          offset = -actualMin / (actualMax - actualMin)
+                float factor = 1.0f / (actualMax - actualMin);
+                float newExposure = std::log2(factor);
+                float newOffset = -actualMin * factor;
+
+                // Clamp to slider ranges
+                newExposure = std::clamp(newExposure, -5.0f, 5.0f);
+                newOffset = std::clamp(newOffset, -1.0f, 1.0f);
+
+                setExposure(newExposure);
+                setOffset(newOffset);
+            });
         }
 
         // Fuzzy filter of open images
@@ -1353,6 +1399,39 @@ void ImageViewer::draw_contents() {
             mHistogram->setMean(statistics->mean);
             mHistogram->setMaximum(statistics->maximum);
             mHistogram->setZero(statistics->histogramZero);
+            mHistogram->setValueRange(statistics->minimum, statistics->maximum);
+
+            // Only reset range to default [0, 1] when statistics change (new image/channel)
+            if (statistics != mLastCanvasStatistics) {
+                mLastCanvasStatistics = statistics;
+
+                // Calculate default range positions for values [0, 1]
+                static const float addition = 0.001f;
+                static const float smallest = std::log(addition);
+                const auto symmetricLog = [](float val) {
+                    return val > 0 ? (std::log(val + addition) - smallest) : -(std::log(-val + addition) - smallest);
+                };
+
+                float minLog = symmetricLog(statistics->minimum);
+                float maxLog = symmetricLog(statistics->maximum);
+                float diffLog = maxLog - minLog;
+
+                if (std::abs(diffLog) > 1e-8f) {
+                    // Compute normalized positions for values 0 and 1
+                    float zeroNorm = (symmetricLog(0.0f) - minLog) / diffLog;
+                    float oneNorm = (symmetricLog(1.0f) - minLog) / diffLog;
+
+                    // Clamp to [0, 1]
+                    zeroNorm = std::clamp(zeroNorm, 0.0f, 1.0f);
+                    oneNorm = std::clamp(oneNorm, 0.0f, 1.0f);
+
+                    // Ensure valid range
+                    if (zeroNorm < oneNorm) {
+                        mHistogram->setRangeNormalized(zeroNorm, oneNorm);
+                    }
+                }
+            }
+
             mHistogram->set_tooltip(
                 fmt::format(
                     "{}\n\n"
@@ -1376,6 +1455,7 @@ void ImageViewer::draw_contents() {
         mHistogram->setMean(0);
         mHistogram->setMaximum(0);
         mHistogram->setZero(0);
+        mHistogram->setValueRange(0, 1);
         mHistogram->set_tooltip(fmt::format("{}", histogramTooltipBase));
     }
 }

@@ -1401,37 +1401,6 @@ void ImageViewer::draw_contents() {
             mHistogram->setZero(statistics->histogramZero);
             mHistogram->setValueRange(statistics->minimum, statistics->maximum);
 
-            // Only reset range to default [0, 1] when statistics change (new image/channel)
-            if (statistics != mLastCanvasStatistics) {
-                mLastCanvasStatistics = statistics;
-
-                // Calculate default range positions for values [0, 1]
-                static const float addition = 0.001f;
-                static const float smallest = std::log(addition);
-                const auto symmetricLog = [](float val) {
-                    return val > 0 ? (std::log(val + addition) - smallest) : -(std::log(-val + addition) - smallest);
-                };
-
-                float minLog = symmetricLog(statistics->minimum);
-                float maxLog = symmetricLog(statistics->maximum);
-                float diffLog = maxLog - minLog;
-
-                if (std::abs(diffLog) > 1e-8f) {
-                    // Compute normalized positions for values 0 and 1
-                    float zeroNorm = (symmetricLog(0.0f) - minLog) / diffLog;
-                    float oneNorm = (symmetricLog(1.0f) - minLog) / diffLog;
-
-                    // Clamp to [0, 1]
-                    zeroNorm = std::clamp(zeroNorm, 0.0f, 1.0f);
-                    oneNorm = std::clamp(oneNorm, 0.0f, 1.0f);
-
-                    // Ensure valid range
-                    if (zeroNorm < oneNorm) {
-                        mHistogram->setRangeNormalized(zeroNorm, oneNorm);
-                    }
-                }
-            }
-
             mHistogram->set_tooltip(
                 fmt::format(
                     "{}\n\n"
@@ -2034,6 +2003,7 @@ void ImageViewer::resetImage() {
     setOffset(0);
     setGamma(2.2f);
     mImageCanvas->resetTransform();
+    mHistogram->resetRangeToDefault();
 }
 
 void ImageViewer::setTonemap(ETonemap tonemap) {

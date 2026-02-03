@@ -97,6 +97,32 @@ public:
     float minValue() const { return mMinValue; }
     float maxValue() const { return mMaxValue; }
 
+    // Reset range to default [0, 1] value range
+    void resetRangeToDefault() {
+        static const float addition = 0.001f;
+        static const float smallest = std::log(addition);
+        const auto symmetricLog = [](float val) {
+            return val > 0 ? (std::log(val + addition) - smallest) : -(std::log(-val + addition) - smallest);
+        };
+
+        float minLog = symmetricLog(mMinValue);
+        float maxLog = symmetricLog(mMaxValue);
+        float diffLog = maxLog - minLog;
+
+        if (std::abs(diffLog) > 1e-8f) {
+            float zeroNorm = (symmetricLog(0.0f) - minLog) / diffLog;
+            float oneNorm = (symmetricLog(1.0f) - minLog) / diffLog;
+
+            zeroNorm = std::clamp(zeroNorm, 0.0f, 1.0f);
+            oneNorm = std::clamp(oneNorm, 0.0f, 1.0f);
+
+            if (zeroNorm < oneNorm) {
+                mRangeMin = zeroNorm;
+                mRangeMax = oneNorm;
+            }
+        }
+    }
+
     // Mouse event handlers
     bool mouse_button_event(const nanogui::Vector2i& p, int button, bool down, int modifiers) override;
     bool mouse_drag_event(const nanogui::Vector2i& p, const nanogui::Vector2i& rel, int button, int modifiers) override;

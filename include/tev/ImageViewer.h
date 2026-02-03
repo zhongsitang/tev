@@ -276,7 +276,6 @@ private:
     std::vector<std::shared_ptr<Image>> mImages;
 
     MultiGraph* mHistogram = nullptr;
-    std::shared_ptr<CanvasStatistics> mLastCanvasStatistics = nullptr;
     std::set<std::shared_ptr<Image>> mToBump;
 
     nanogui::TextBox* mFilter = nullptr;
